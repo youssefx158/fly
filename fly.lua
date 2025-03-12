@@ -1,7 +1,8 @@
 --[[
   Integrated script for Roblox games (e.g. Blox Fruits) that includes Flight mode, Speed adjustment, Players List view,
   a complete Vanish option for your character (which now vanishes globally for others), a teleportation feature when clicking on a player's circle,
-  and an additional players list feature with a selectable list, a teleport button, and a pull ("سحب") button to bring the selected player to you.
+  and an additional players list feature with a selectable list, a teleport button, a pull ("سحب") button to bring the selected player to you,
+  and a new spectate ("مراقبه") button to watch what the selected player sees.
   
   FEATURES:
     1. Flight Tab:
@@ -24,9 +25,9 @@
        - Teleport (via circles): Clicking on a player's drawn circle teleports you near that player.
        - Players List: A separate draggable frame shows a list of players on the map.
          The list has a header displaying "الفريمات". You can select a player from the list and click the "انتقال" (Teleport)
-         button to move to that player's location.
-         Additionally, a new "سحب" (Pull) button is provided to pull the selected player to your location.
-       - **التعديل الجديد:** عند الضغط على زر "انتقال" في قائمة اللاعبين يتم تفعيل "الانتقال اللاصق" بحيث تتابع شخصيتك موقع اللاعب المحدد بشكل مستمر حتى يتم إلغاء التفعيل.
+         button to toggle sticky teleportation (follow) on that player's position.
+         Additionally, a "سحب" (Pull) button is provided to pull the selected player to your location.
+       - **المعدل الجديد:** تم إضافة زر "مراقبه" أسفل زر "سحب"؛ عند الضغط عليه، تنتقل الكاميرا لتعرض ما يراه اللاعب المُختار، وكأنك تراقبه؛ وعند الضغط مرة أخرى يتم الرجوع إلى الكاميرا الخاصة بشخصيتك.
        
     4. UI Toggle (CTRL Key):
        - The main UI window will hide when you press CTRL.
@@ -40,8 +41,9 @@
          • Use "تفعيل الدوائر على اللاعبين" to enable/disable drawn circles.
          • Use "تفعيل الاختباء" to toggle vanish (global vanish; others will not see your character).
          • You can click on a player's circle to teleport near them.
-         • You can also select a player from the draggable player list frame and click the "انتقال" button to toggle الانتقال اللاصق (follow) on that player.
+         • You can also select a player from the draggable player list frame and click the "انتقال" button to toggle sticky teleportation (follow).
          • Click the "سحب" button to pull the selected player to your location.
+         • Click the new "مراقبه" button to spectate the selected player (toggle on/off).
        
   Note: This script uses the Drawing library (supported by exploits like Synapse X) and exploit functions to globally modify character properties.
 --]]
@@ -94,8 +96,9 @@ local selectedPlayer = nil       -- Currently selected player from the list
 local playerListFrame = nil      -- Frame that holds the player list
 local teleportSelectedButton = nil  -- Button to teleport to the selected player
 
--- متغير جديد لتفعيل الانتقال اللاصق
+-- متغيرات جديدة للانتقال اللاصق والمراقبه
 local stickyTeleportActive = false
+local spectateActive = false
 
 ---------------------------------------------
 -- Helper Functions: Create Circle, Create Name Label, Get Character
@@ -544,6 +547,37 @@ local function createMainUI()
       if myCharacter and myCharacter:FindFirstChild("HumanoidRootPart") then
         local pullPos = myCharacter.HumanoidRootPart.Position + Vector3.new(0,5,0)
         selectedPlayer.Character:MoveTo(pullPos)
+      end
+    end
+  end)
+  
+  -- Create Spectate Button ("مراقبه") under the pull button.
+  local spectateButton = Instance.new("TextButton")
+  spectateButton.Name = "SpectateButton"
+  spectateButton.Size = UDim2.new(0,150,0,30)
+  spectateButton.Position = UDim2.new(0,320,0,190)  -- Position adjusted under "سحب"
+  spectateButton.BackgroundColor3 = Color3.fromRGB(255,165,0)
+  spectateButton.Text = "مراقبه"
+  spectateButton.TextColor3 = Color3.new(1,1,1)
+  spectateButton.Font = Enum.Font.SourceSansBold
+  spectateButton.TextSize = 18
+  spectateButton.Parent = playersPanel
+
+  spectateButton.MouseButton1Click:Connect(function()
+    if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("Head") then
+      if not spectateActive then
+        -- تغيير كاميرا اللعبة لتتابع رأس اللاعب المُختار
+        Workspace.CurrentCamera.CameraSubject = selectedPlayer.Character.Head
+        spectateActive = true
+        spectateButton.Text = "إلغاء المراقبه"
+      else
+        -- الرجوع إلى كاميرا شخصيتك
+        local character = getCharacter()
+        if character and character:FindFirstChild("Humanoid") then
+          Workspace.CurrentCamera.CameraSubject = character.Humanoid
+        end
+        spectateActive = false
+        spectateButton.Text = "مراقبه"
       end
     end
   end)
