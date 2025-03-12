@@ -2,7 +2,7 @@
   Integrated script for Roblox games (e.g. Blox Fruits) that includes Flight mode, Speed adjustment, Players List view,
   a complete Vanish option for your character (which now vanishes globally for others), a teleportation feature when clicking on a player's circle,
   and an additional players list feature with a selectable list, a teleport button, and a pull ("سحب") button to bring the selected player to you.
-
+  
   FEATURES:
     1. Flight Tab:
        - Toggle flight mode.
@@ -10,12 +10,12 @@
        - Set flight speed manually. If you enter "inf" (case-insensitive) as input,
          the flight speed will be set to an extremely high value.
        - Flight mode now phases through walls by disabling collisions on your character parts.
-
+  
     2. Speed Tab:
        - Toggle WalkSpeed modification.
        - Increase/decrease WalkSpeed.
        - Set WalkSpeed manually (synchronized with flight speed).
-
+  
     3. Players Tab:
        - Toggle drawing circles around players.
        - Display the names of players above their heads.
@@ -26,11 +26,12 @@
          The list has a header displaying "الفريمات". You can select a player from the list and click the "انتقال" (Teleport)
          button to move to that player's location.
          Additionally, a new "سحب" (Pull) button is provided to pull the selected player to your location.
+       - **التعديل الجديد:** عند الضغط على زر "انتقال" في قائمة اللاعبين يتم تفعيل "الانتقال اللاصق" بحيث تتابع شخصيتك موقع اللاعب المحدد بشكل مستمر حتى يتم إلغاء التفعيل.
        
     4. UI Toggle (CTRL Key):
        - The main UI window will hide when you press CTRL.
        - Press CTRL again to show it again.
-
+  
   Instructions:
     - Place this script in StarterPlayer > StarterPlayerScripts.
     - Press "F" to toggle flight mode.
@@ -39,7 +40,7 @@
          • Use "تفعيل الدوائر على اللاعبين" to enable/disable drawn circles.
          • Use "تفعيل الاختباء" to toggle vanish (global vanish; others will not see your character).
          • You can click on a player's circle to teleport near them.
-         • You can also select a player from the draggable player list frame and click the "انتقال" button to teleport to that player.
+         • You can also select a player from the draggable player list frame and click the "انتقال" button to toggle الانتقال اللاصق (follow) on that player.
          • Click the "سحب" button to pull the selected player to your location.
        
   Note: This script uses the Drawing library (supported by exploits like Synapse X) and exploit functions to globally modify character properties.
@@ -92,6 +93,9 @@ local vanishActive = false       -- True if vanish is enabled
 local selectedPlayer = nil       -- Currently selected player from the list
 local playerListFrame = nil      -- Frame that holds the player list
 local teleportSelectedButton = nil  -- Button to teleport to the selected player
+
+-- متغير جديد لتفعيل الانتقال اللاصق
+local stickyTeleportActive = false
 
 ---------------------------------------------
 -- Helper Functions: Create Circle, Create Name Label, Get Character
@@ -510,12 +514,14 @@ local function createMainUI()
   teleportSelectedButton.TextSize = 18
   teleportSelectedButton.Parent = playersPanel
   
+  -- تعديل وظيفة زر الانتقال لتفعيل/إلغاء الانتقال اللاصق
   teleportSelectedButton.MouseButton1Click:Connect(function()
     if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("Head") then
-      local targetPos = selectedPlayer.Character.Head.Position + Vector3.new(0,5,0)
-      local myCharacter = getCharacter()
-      if myCharacter then
-        myCharacter:MoveTo(targetPos)
+      stickyTeleportActive = not stickyTeleportActive
+      if stickyTeleportActive then
+        teleportSelectedButton.Text = "إلغاء الانتقال"
+      else
+        teleportSelectedButton.Text = "انتقال"
       end
     end
   end)
@@ -564,7 +570,8 @@ local function createMainUI()
     speedInput = speedInput,
     speedSetButton = speedSetButton,
     playersToggle = playersToggle,
-    vanishToggle = vanishToggle
+    vanishToggle = vanishToggle,
+    teleportSelectedButton = teleportSelectedButton
   }
 end
 
@@ -878,7 +885,7 @@ ui.playersPanel.VanishToggle.MouseButton1Click:Connect(function()
   end
 end)
 
--- Teleport on Circle Click
+-- Teleport on Circle Click (يبقى كما هو التفعيل لمرة واحدة)
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
   if input.UserInputType == Enum.UserInputType.MouseButton1 and not gameProcessed then
     local mousePos = UserInputService:GetMouseLocation()
@@ -990,8 +997,18 @@ RunService.RenderStepped:Connect(function(deltaTime)
   if playersCirclesEnabled then
     updatePlayerCircles()
   end
-end)
 
----------------------------------------------
--- End of Players Tab Functions
----------------------------------------------
+  -- الكود الجديد للانتقال اللاصق:
+  if stickyTeleportActive then
+    if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("Head") then
+      local targetPos = selectedPlayer.Character.Head.Position + Vector3.new(0,5,0)
+      local myCharacter = getCharacter()
+      if myCharacter then
+        myCharacter:MoveTo(targetPos)
+      end
+    else
+      stickyTeleportActive = false
+      ui.teleportSelectedButton.Text = "انتقال"
+    end
+  end
+end)
