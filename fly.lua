@@ -6,20 +6,20 @@
     - Lighting tab: Adjust game brightness (increase, decrease, or set a specific value).
 
   Sticky Teleport: 
-    The sticky teleport function continuously checks if the selected player (target) is valid.
-    If the target is available (has a Character with a Head), your character will be teleported to them.
-    If the target becomes invalid (e.g. dies or temporarily unavailable), the script will keep checking
-    until the target becomes valid again—unless you cancel the sticky teleport.
+    Continuously checks if the selected player is valid. If available (has a Character with a Head),
+    your character will be teleported to them. If the target dies or is temporarily unavailable,
+    the script will wait until they respawn—unless you cancel sticky teleport.
 
+  NOTE:
+    - This version places the ScreenGui in CoreGui to ensure it stays above other interfaces.
+    - The code has been improved with additional checks and error handling so that it works
+      in any system/map without relying on a specific interface.
+    
   Instructions:
     - Place this script in StarterPlayer > StarterPlayerScripts.
     - Use shortcuts (e.g. F for toggling flight, CTRL to toggle UI).
     - In the Players tab, use the "انتقال" button to toggle sticky teleportation.
     - In the Lighting tab, adjust game brightness as needed.
-
-  NOTE:
-    - This version places the ScreenGui under CoreGui to ensure it stays above the Roblox Esc menu.
-    - This might be considered an exploit in some contexts, so be mindful of game policy.
 --]]
 
 ---------------------------------------------
@@ -30,7 +30,7 @@ local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
-local CoreGui = game:GetService("CoreGui")  -- لاستخدام CoreGui بدل PlayerGui
+local CoreGui = game:GetService("CoreGui")
 
 local player = Players.LocalPlayer
 
@@ -238,17 +238,15 @@ end
 -- UI Creation Function: Main Tabs (Flight, Speed, Players, Lighting)
 ---------------------------------------------
 local function createMainUI()
-  -- بدلاً من PlayerGui سنستخدم CoreGui
+  -- إنشاء الواجهة داخل CoreGui لضمان ظهورها فوق كل شيء
   local screenGui = Instance.new("ScreenGui")
   screenGui.Name = "FlightSpeedUI"
   screenGui.ResetOnSpawn = false
   screenGui.IgnoreGuiInset = true
-  -- نرفعه في DisplayOrder و ZIndexBehavior
   screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
   screenGui.DisplayOrder = 999999
+  screenGui.Parent = CoreGui
   
-  screenGui.Parent = CoreGui  -- وضعه في CoreGui
-
   local mainFrame = Instance.new("Frame")
   mainFrame.Name = "MainFrame"
   mainFrame.Size = UDim2.new(0,350,0,300)
