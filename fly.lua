@@ -31,6 +31,14 @@ local Lighting = game:GetService("Lighting")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- إنشاء RemoteEvent للسحب إذا لم يكن موجوداً
+local pullEvent = ReplicatedStorage:FindFirstChild("PullEvent") 
+if not pullEvent then
+    pullEvent = Instance.new("RemoteEvent", ReplicatedStorage)
+    pullEvent.Name = "PullEvent"
+end
 
 local player = Players.LocalPlayer
 
@@ -69,13 +77,13 @@ local nameLabels = {}            -- key: player, value: BillboardGui
 local vanishActive = false
 
 -- For players list feature:
-local selectedPlayer = nil       -- The selected target player.
+local selectedPlayer = nil       -- اللاعب المختار للانتقال والمراقبة.
+local pulledPlayers = {}         -- جدول لتخزين اللاعبين الذين تم سحبهم.
 local playerListFrame = nil      -- Frame that holds the players list.
 local teleportSelectedButton = nil  -- Button to toggle sticky teleport.
 
--- Sticky Teleport, Pull and Spectate variables:
+-- Sticky Teleport and Spectate variables:
 local stickyTeleportActive = false
-local pullActive = false         -- Toggle for continuous pull
 local spectateActive = false
 
 ---------------------------------------------
@@ -522,12 +530,14 @@ local function createMainUI()
   pullButton.TextSize = 18
   pullButton.MouseButton1Click:Connect(function()
     if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
-      pullActive = not pullActive
-      if pullActive then
-        pullButton.Text = "إلغاء السحب"
-      else
+      if pulledPlayers[selectedPlayer.Name] then
+        pulledPlayers[selectedPlayer.Name] = nil
         pullButton.Text = "سحب"
+      else
+        pulledPlayers[selectedPlayer.Name] = selectedPlayer
+        pullButton.Text = "إلغاء السحب"
       end
+      updatePlayerList()
     end
   end)
   
@@ -668,15 +678,18 @@ local function updatePlayerList()
       button.Name = "PlayerButton_" .. p.Name
       button.Size = UDim2.new(1,0,0,25)
       button.BackgroundColor3 = Color3.fromRGB(100,100,100)
+      local text = p.Name
       if not p.Character or not p.Character:FindFirstChild("Head") then
-        button.Text = p.Name .. " (لم تحمل)"
+        text = text .. " (لم تحمل)"
         p.CharacterAdded:Connect(function(character)
           wait(1)
-          button.Text = p.Name
+          button.Text = p.Name .. (pulledPlayers[p.Name] and " - سحب" or "")
         end)
-      else
-        button.Text = p.Name
       end
+      if pulledPlayers[p.Name] then
+        text = text .. " - سحب"
+      end
+      button.Text = text
       button.TextColor3 = Color3.new(1,1,1)
       button.Font = Enum.Font.SourceSansBold
       button.TextSize = 18
@@ -886,7 +899,7 @@ ui.speedSetButton.MouseButton1Click:Connect(function()
 end)
 
 ---------------------------------------------
--- Players Tab Functions (Circles, Vanish, Teleport, etc.)
+-- Players Tab Functions (Circles, Vanish, Teleport, Pull, etc.)
 ---------------------------------------------
 local function updatePlayerCircles()
   local cam = Workspace.CurrentCamera
@@ -1144,18 +1157,37 @@ RunService.RenderStepped:Connect(function(deltaTime)
         end
       end
     end
+    -- نقل اللاعبين المسحوبين معك عند الانتقال باستخدام RemoteEvent:
+    for _, p in pairs(pulledPlayers) do
+      if p and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+        local myCharacter = getCharacter()
+        if myCharacter and myCharacter:FindFirstChild("HumanoidRootPart") then
+          local pullPos = myCharacter.HumanoidRootPart.Position + Vector3.new(0,5,0)
+          pullEvent:FireServer(p, pullPos)
+        end
+      end
+    end
   end
   
-  -- Continuous Pull Functionality:
-  if pullActive then
-    if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
+  -- Continuous Pull Functionality for pulled players using RemoteEvent:
+  for _, p in pairs(pulledPlayers) do
+    if p and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
       local myCharacter = getCharacter()
       if myCharacter and myCharacter:FindFirstChild("HumanoidRootPart") then
-        local pullPos = myCharacter.HumanoidRootPart.Position + Vector3.new(0,5,0)
-        pcall(function()
-          selectedPlayer.Character:MoveTo(pullPos)
-        end)
+        local pullPos = myCharacter.HumanoidRootPart.Position + Vector3.new(0, 5, 0)
+        pullEvent:FireServer(p, pullPos)
       end
+    end
+  end
+end)
+
+---------------------------------------------
+-- تحديث دوري لقائمة اللاعبين كل ثانية
+---------------------------------------------
+spawn(function()
+  while wait(1) do
+    if ui and ui.playersPanel and ui.playersPanel.Visible then
+      updatePlayerList()
     end
   end
 end)
