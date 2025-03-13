@@ -5,21 +5,18 @@
     - Players tab: Draw circles around players, vanish option, teleport (sticky teleport), pull, and spectate.
     - Lighting tab: Adjust game brightness (increase, decrease, or set a specific value).
 
-  Sticky Teleport: 
+  Sticky Teleport:
     Continuously checks if the selected player is valid. If available (has a Character with a Head),
     your character will be teleported to them. If the target dies or is temporarily unavailable,
     the script will wait until they respawn—unless you cancel sticky teleport.
 
   NOTE:
     - This version places the ScreenGui in CoreGui to ensure it stays above other interfaces.
-    - The code has been improved with additional checks and error handling so that it works
-      in any system/map without relying on a specific interface.
+    - All active tasks (flight, speed boost, pull, etc.) will be disabled when the close button is pressed.
     
   Instructions:
-    - Place this script in StarterPlayer > StarterPlayerScripts.
-    - Use shortcuts (e.g. F for toggling flight, CTRL to toggle UI).
-    - In the Players tab, use the "انتقال" button to toggle sticky teleportation.
-    - In the Lighting tab, adjust game brightness as needed.
+    - Place this LocalScript in StarterPlayer > StarterPlayerScripts.
+    - Also, add the provided Server Script (below) in ServerScriptService.
 --]]
 
 ---------------------------------------------
@@ -46,8 +43,8 @@ local player = Players.LocalPlayer
 -- Flight Variables
 ---------------------------------------------
 local flying = false
-local flightSpeed = 50             -- Current flight speed.
-local flightSpeedIncrement = 10    -- Increment value.
+local flightSpeed = 50             -- سرعة الطيران الحالية.
+local flightSpeedIncrement = 10    -- قيمة الزيادة.
 local bodyGyro, bodyVelocity
 local flightControl = { N = false, S = false, E = false, W = false, Up = false, Down = false }
 
@@ -55,12 +52,12 @@ local flightControl = { N = false, S = false, E = false, W = false, Up = false, 
 -- Speed (WalkSpeed) Variables
 ---------------------------------------------
 local speedBoostActive = false
-local boostedSpeed = 50            -- Current WalkSpeed.
-local speedIncrement = 5           -- Increment value.
-local originalWalkSpeed = 16       -- Default WalkSpeed.
+local boostedSpeed = 50            -- السرعة الحالية.
+local speedIncrement = 5           -- قيمة الزيادة.
+local originalWalkSpeed = 16       -- سرعة المشي الافتراضية.
 
 ---------------------------------------------
--- Auto-Increase Variables (for holding buttons)
+-- Auto-Increase Variables (لزيادة السرعة عند الضغط)
 ---------------------------------------------
 local autoIncreasingFlight = false
 local autoIncreaseAccumulatorFlight = 0
@@ -69,27 +66,27 @@ local autoIncreaseAccumulatorSpeed = 0
 local autoIncreaseInterval = 0.1
 
 ---------------------------------------------
--- Players Tab Variables, Vanish, Teleport, etc.
+-- Players Tab Variables, Vanish, Teleport, Pull, etc.
 ---------------------------------------------
 local playersCirclesEnabled = false
-local playerCircles = {}         -- key: player, value: Drawing Circle object
-local nameLabels = {}            -- key: player, value: BillboardGui
+local playerCircles = {}         -- لتخزين دوائر اللاعبين
+local nameLabels = {}            -- لتخزين ملصقات أسماء اللاعبين
 local vanishActive = false
 
--- For players list feature:
-local selectedPlayer = nil       -- اللاعب المختار للانتقال والمراقبة.
+-- المتغيرات الخاصة بقائمة اللاعبين:
+local selectedPlayer = nil       -- اللاعب المختار.
 local pulledPlayers = {}         -- جدول لتخزين اللاعبين الذين تم سحبهم.
-local playerListFrame = nil      -- Frame that holds the players list.
-local teleportSelectedButton = nil  -- Button to toggle sticky teleport.
+local playerListFrame = nil      -- إطار قائمة اللاعبين.
+local teleportSelectedButton = nil  -- زر الانتقال.
 
--- Sticky Teleport and Spectate variables:
+-- متغيرات الانتقال والمراقبة:
 local stickyTeleportActive = false
 local spectateActive = false
 
 ---------------------------------------------
 -- Lighting Variables
 ---------------------------------------------
-local brightnessIncrement = 0.5    -- Increment value for brightness.
+local brightnessIncrement = 0.5    -- قيمة زيادة الإضاءة.
 
 ---------------------------------------------
 -- Helper Functions
@@ -98,10 +95,10 @@ local function createCircle()
   local circle = Drawing.new("Circle")
   circle.Visible = true
   circle.Transparency = 1
-  circle.Color = Color3.new(0, 1, 0)      -- Green.
+  circle.Color = Color3.new(0, 1, 0)      -- أخضر.
   circle.Thickness = 2
   circle.NumSides = 100
-  circle.Radius = 50                     -- Adjust based on camera FOV.
+  circle.Radius = 50                     -- يمكنك تعديلها حسب الـ FOV.
   return circle
 end
 
@@ -129,7 +126,7 @@ local function getCharacter()
 end
 
 ---------------------------------------------
--- Flight Functions (with Phasing)
+-- Flight Functions
 ---------------------------------------------
 local function enableFlight(character)
   local humanoid = character:FindFirstChildOfClass("Humanoid")
@@ -243,10 +240,9 @@ local function setLighting(value)
 end
 
 ---------------------------------------------
--- UI Creation Function: Main Tabs (Flight, Speed, Players, Lighting)
+-- UI Creation Function
 ---------------------------------------------
 local function createMainUI()
-  -- إنشاء الواجهة داخل CoreGui لضمان ظهورها فوق كل شيء
   local screenGui = Instance.new("ScreenGui")
   screenGui.Name = "FlightSpeedUI"
   screenGui.ResetOnSpawn = false
@@ -263,17 +259,20 @@ local function createMainUI()
   mainFrame.BackgroundTransparency = 0.2
   mainFrame.Active = true
   mainFrame.Draggable = true
+  mainFrame.ClipsDescendants = false  -- يسمح بعرض العناصر خارج النافذة
   mainFrame.Parent = screenGui
   
+  -- زر "X" خارج النافذة، يظل متحرك مع النافذة
   local closeButton = Instance.new("TextButton", mainFrame)
   closeButton.Name = "CloseButton"
-  closeButton.Size = UDim2.new(0,30,0,30)
-  closeButton.Position = UDim2.new(1,-35,0,5)
-  closeButton.BackgroundColor3 = Color3.fromRGB(200,50,50)
+  closeButton.Size = UDim2.new(0,40,0,40)
+  closeButton.Position = UDim2.new(1, 5, 0, -5)  -- يظهر خارج حدود MainFrame
+  closeButton.BackgroundColor3 = Color3.fromRGB(220,20,60)
   closeButton.Text = "X"
   closeButton.TextColor3 = Color3.new(1,1,1)
   closeButton.Font = Enum.Font.SourceSansBold
-  closeButton.TextSize = 18
+  closeButton.TextSize = 28
+  closeButton.BorderSizePixel = 2
   
   local tabWidth = 85
   local tabFlight = Instance.new("TextButton", mainFrame)
@@ -785,18 +784,30 @@ ui.lightSetButton.MouseButton1Click:Connect(function()
 end)
 
 ---------------------------------------------
--- Close UI Function
+-- Close UI Function - إغلاق جميع المهام وإعادة الحالة الطبيعية
 ---------------------------------------------
 local function closeUI()
+  -- إيقاف الطيران وإعادة تمكين التصادم
   if flying then
     disableFlight(getCharacter(), bodyGyro, bodyVelocity)
     flying = false
   end
+  -- إعادة سرعة المشي إلى الأصل وإيقاف تعديل السرعة
   if speedBoostActive then
     disableSpeedBoost()
     speedBoostActive = false
   end
-  ui.mainFrame:Destroy()
+  -- إيقاف أي زيادة تلقائية ومهام أخرى
+  autoIncreasingFlight = false
+  autoIncreasingSpeed = false
+  stickyTeleportActive = false
+  spectateActive = false
+  pulledPlayers = {}  -- تفريغ قائمة السحب
+  
+  -- إزالة كافة عناصر الـ UI
+  if ui and ui.mainFrame then
+    ui.mainFrame:Destroy()
+  end
 end
 
 ui.closeButton.MouseButton1Click:Connect(function() closeUI() end)
