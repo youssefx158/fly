@@ -1,51 +1,21 @@
 --[[
-  Integrated script for Roblox games (e.g. Blox Fruits) that includes Flight mode, Speed adjustment, Players List view,
-  a complete Vanish option for your character (which now vanishes globally for others), a teleportation feature when clicking on a player's circle,
-  and an additional players list feature with a selectable list, a teleport button, a pull ("سحب") button to bring the selected player to you,
-  and a new spectate ("مراقبه") button to watch what the selected player sees.
-  
-  FEATURES:
-    1. Flight Tab:
-       - Toggle flight mode.
-       - Increase/decrease flight speed without any maximum limit.
-       - Set flight speed manually. If you enter "inf" (case-insensitive) as input,
-         the flight speed will be set to an extremely high value.
-       - Flight mode now phases through walls by disabling collisions on your character parts.
-  
-    2. Speed Tab:
-       - Toggle WalkSpeed modification.
-       - Increase/decrease WalkSpeed.
-       - Set WalkSpeed manually (synchronized with flight speed).
-  
-    3. Players Tab:
-       - Toggle drawing circles around players.
-       - Display the names of players above their heads.
-       - Toggle Vanish: When activated, your character becomes completely invisible to all players.
-         (This version uses a modified vanish function that sets all character parts’ Transparency.)
-       - Teleport (via circles): Clicking on a player's drawn circle teleports you near that player.
-       - Players List: A separate draggable frame shows a list of players on the map.
-         The list has a header displaying "الفريمات". You can select a player from the list and click the "انتقال" (Teleport)
-         button to toggle sticky teleportation (follow) on that player's position.
-         Additionally, a "سحب" (Pull) button is provided to pull the selected player to your location.
-       - **المعدل الجديد:** تم إضافة زر "مراقبه" أسفل زر "سحب"؛ عند الضغط عليه، تنتقل الكاميرا لتعرض ما يراه اللاعب المُختار، وكأنك تراقبه؛ وعند الضغط مرة أخرى يتم الرجوع إلى الكاميرا الخاصة بشخصيتك.
-       
-    4. UI Toggle (CTRL Key):
-       - The main UI window will hide when you press CTRL.
-       - Press CTRL again to show it again.
-  
+  Integrated script for Roblox games (e.g. Blox Fruits) that includes:
+    - Flight mode with adjustable speed and phasing through walls.
+    - WalkSpeed adjustment (Speed Boost).
+    - Players tab: Draw circles around players, vanish option, teleport (sticky teleport), pull, and spectate.
+    - Lighting tab: Adjust game brightness (increase, decrease, or set a specific value).
+
+  Sticky Teleport: 
+    The sticky teleport function continuously checks if the selected player (target) is valid.
+    If the target is available (has a Character with a Head), your character will be teleported to them.
+    If the target becomes invalid (e.g. dies or temporarily unavailable), the script will keep checking
+    until the target becomes valid again—unless you cancel the sticky teleport.
+
   Instructions:
     - Place this script in StarterPlayer > StarterPlayerScripts.
-    - Press "F" to toggle flight mode.
-    - Press CTRL to toggle the main UI window.
-    - In the Players tab:
-         • Use "تفعيل الدوائر على اللاعبين" to enable/disable drawn circles.
-         • Use "تفعيل الاختباء" to toggle vanish (global vanish; others will not see your character).
-         • You can click on a player's circle to teleport near them.
-         • You can also select a player from the draggable player list frame and click the "انتقال" button to toggle sticky teleportation (follow).
-         • Click the "سحب" button to pull the selected player to your location.
-         • Click the new "مراقبه" button to spectate the selected player (toggle on/off).
-       
-  Note: This script uses the Drawing library (supported by exploits like Synapse X) and exploit functions to globally modify character properties.
+    - Use shortcuts (e.g. F for toggling flight, CTRL to toggle UI).
+    - In the Players tab, use the "انتقال" button to toggle sticky teleportation.
+    - In the Lighting tab, adjust game brightness as needed.
 --]]
 
 ---------------------------------------------
@@ -53,6 +23,7 @@
 ---------------------------------------------
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
@@ -62,7 +33,7 @@ local player = Players.LocalPlayer
 ---------------------------------------------
 local flying = false
 local flightSpeed = 50             -- Current flight speed.
-local flightSpeedIncrement = 10    -- Increment value for flight speed.
+local flightSpeedIncrement = 10    -- Increment value.
 local bodyGyro, bodyVelocity
 local flightControl = { N = false, S = false, E = false, W = false, Up = false, Down = false }
 
@@ -70,12 +41,12 @@ local flightControl = { N = false, S = false, E = false, W = false, Up = false, 
 -- Speed (WalkSpeed) Variables
 ---------------------------------------------
 local speedBoostActive = false
-local boostedSpeed = 50            -- Current speed.
-local speedIncrement = 5           -- Increment value for speed.
+local boostedSpeed = 50            -- Current WalkSpeed.
+local speedIncrement = 5           -- Increment value.
 local originalWalkSpeed = 16       -- Default WalkSpeed.
 
 ---------------------------------------------
--- Auto-Increase Variables (for button holding)
+-- Auto-Increase Variables (for holding buttons)
 ---------------------------------------------
 local autoIncreasingFlight = false
 local autoIncreaseAccumulatorFlight = 0
@@ -84,24 +55,30 @@ local autoIncreaseAccumulatorSpeed = 0
 local autoIncreaseInterval = 0.1
 
 ---------------------------------------------
--- Players List (Circles) Variables, Vanish, Teleport & Players List UI
+-- Players Tab Variables, Vanish, Teleport, etc.
 ---------------------------------------------
 local playersCirclesEnabled = false
 local playerCircles = {}         -- key: player, value: Drawing Circle object
 local nameLabels = {}            -- key: player, value: BillboardGui
-local vanishActive = false       -- True if vanish is enabled
+local vanishActive = false
 
 -- For players list feature:
-local selectedPlayer = nil       -- Currently selected player from the list
-local playerListFrame = nil      -- Frame that holds the player list
-local teleportSelectedButton = nil  -- Button to teleport to the selected player
+local selectedPlayer = nil       -- The selected target player.
+local playerListFrame = nil      -- Frame that holds the players list.
+local teleportSelectedButton = nil  -- Button to toggle sticky teleport.
 
--- متغيرات جديدة للانتقال اللاصق والمراقبه
+-- Sticky Teleport, Pull and Spectate variables:
 local stickyTeleportActive = false
+local pullActive = false         -- Toggle for continuous pull
 local spectateActive = false
 
 ---------------------------------------------
--- Helper Functions: Create Circle, Create Name Label, Get Character
+-- Lighting Variables
+---------------------------------------------
+local brightnessIncrement = 0.5    -- Increment value for brightness.
+
+---------------------------------------------
+-- Helper Functions
 ---------------------------------------------
 local function createCircle()
   local circle = Drawing.new("Circle")
@@ -138,7 +115,7 @@ local function getCharacter()
 end
 
 ---------------------------------------------
--- Flight Functions (with Phasing through Walls)
+-- Flight Functions (with Phasing)
 ---------------------------------------------
 local function enableFlight(character)
   local humanoid = character:FindFirstChildOfClass("Humanoid")
@@ -147,18 +124,15 @@ local function enableFlight(character)
   end
   local root = character:WaitForChild("HumanoidRootPart")
   
-  local gyro = Instance.new("BodyGyro")
+  local gyro = Instance.new("BodyGyro", root)
   gyro.P = 90000
   gyro.MaxTorque = Vector3.new(90000,90000,90000)
   gyro.CFrame = root.CFrame
-  gyro.Parent = root
   
-  local velocity = Instance.new("BodyVelocity")
+  local velocity = Instance.new("BodyVelocity", root)
   velocity.Velocity = Vector3.new(0,0,0)
   velocity.MaxForce = Vector3.new(90000,90000,90000)
-  velocity.Parent = root
   
-  -- Disable collisions so flight phases through walls
   for _, part in ipairs(character:GetDescendants()) do
     if part:IsA("BasePart") then
       pcall(function() part.CanCollide = false end)
@@ -176,7 +150,6 @@ local function disableFlight(character, gyro, velocity)
   if gyro then gyro:Destroy() end
   if velocity then velocity:Destroy() end
   
-  -- Re-enable collisions
   for _, part in ipairs(character:GetDescendants()) do
     if part:IsA("BasePart") then
       pcall(function() part.CanCollide = true end)
@@ -205,16 +178,13 @@ local function disableSpeedBoost()
 end
 
 ---------------------------------------------
--- Vanish Functions (Global vanish)
+-- Vanish Functions
 ---------------------------------------------
 local function enableVanish()
   local character = getCharacter()
   for _, part in ipairs(character:GetDescendants()) do
     if part:IsA("BasePart") then
-      pcall(function()
-        part.Transparency = 1
-        part.Reflectance = 0
-      end)
+      pcall(function() part.Transparency = 1; part.Reflectance = 0 end)
     elseif part:IsA("Decal") then
       pcall(function() part.Transparency = 1 end)
     end
@@ -239,7 +209,27 @@ local function disableVanish()
 end
 
 ---------------------------------------------
--- UI Creation Function: Main Tabs (Flight, Speed, Players)
+-- Lighting Functions
+---------------------------------------------
+local function increaseLighting()
+  Lighting.Brightness = Lighting.Brightness + brightnessIncrement
+end
+
+local function decreaseLighting()
+  if Lighting.Brightness - brightnessIncrement >= 0 then
+    Lighting.Brightness = Lighting.Brightness - brightnessIncrement
+  end
+end
+
+local function setLighting(value)
+  local newVal = tonumber(value)
+  if newVal then
+    Lighting.Brightness = newVal
+  end
+end
+
+---------------------------------------------
+-- UI Creation Function: Main Tabs (Flight, Speed, Players, Lighting)
 ---------------------------------------------
 local function createMainUI()
   local playerGui = player:WaitForChild("PlayerGui")
@@ -250,27 +240,26 @@ local function createMainUI()
   
   local mainFrame = Instance.new("Frame")
   mainFrame.Name = "MainFrame"
-  mainFrame.Size = UDim2.new(0,330,0,260)
-  mainFrame.Position = UDim2.new(0.5,-165,0.5,-130)
-  mainFrame.BackgroundColor3 = Color3.fromRGB(30,30,30)
-  mainFrame.BackgroundTransparency = 0.3
+  mainFrame.Size = UDim2.new(0,350,0,300)
+  mainFrame.Position = UDim2.new(0.5,-175,0.5,-150)
+  mainFrame.BackgroundColor3 = Color3.fromRGB(20,20,20)
+  mainFrame.BackgroundTransparency = 0.2
   mainFrame.Active = true
   mainFrame.Draggable = true
   mainFrame.Parent = screenGui
   
-  local closeButton = Instance.new("TextButton")
+  local closeButton = Instance.new("TextButton", mainFrame)
   closeButton.Name = "CloseButton"
   closeButton.Size = UDim2.new(0,30,0,30)
   closeButton.Position = UDim2.new(1,-35,0,5)
-  closeButton.BackgroundColor3 = Color3.fromRGB(178,34,34)
+  closeButton.BackgroundColor3 = Color3.fromRGB(200,50,50)
   closeButton.Text = "X"
   closeButton.TextColor3 = Color3.new(1,1,1)
   closeButton.Font = Enum.Font.SourceSansBold
   closeButton.TextSize = 18
-  closeButton.Parent = mainFrame
   
-  local tabWidth = 110
-  local tabFlight = Instance.new("TextButton")
+  local tabWidth = 85
+  local tabFlight = Instance.new("TextButton", mainFrame)
   tabFlight.Name = "TabFlight"
   tabFlight.Size = UDim2.new(0,tabWidth,0,30)
   tabFlight.Position = UDim2.new(0,0,0,0)
@@ -279,9 +268,8 @@ local function createMainUI()
   tabFlight.TextColor3 = Color3.new(1,1,1)
   tabFlight.Font = Enum.Font.SourceSansBold
   tabFlight.TextSize = 18
-  tabFlight.Parent = mainFrame
   
-  local tabSpeed = Instance.new("TextButton")
+  local tabSpeed = Instance.new("TextButton", mainFrame)
   tabSpeed.Name = "TabSpeed"
   tabSpeed.Size = UDim2.new(0,tabWidth,0,30)
   tabSpeed.Position = UDim2.new(0,tabWidth,0,0)
@@ -290,9 +278,8 @@ local function createMainUI()
   tabSpeed.TextColor3 = Color3.new(1,1,1)
   tabSpeed.Font = Enum.Font.SourceSansBold
   tabSpeed.TextSize = 18
-  tabSpeed.Parent = mainFrame
   
-  local tabPlayers = Instance.new("TextButton")
+  local tabPlayers = Instance.new("TextButton", mainFrame)
   tabPlayers.Name = "TabPlayers"
   tabPlayers.Size = UDim2.new(0,tabWidth,0,30)
   tabPlayers.Position = UDim2.new(0,tabWidth*2,0,0)
@@ -301,16 +288,24 @@ local function createMainUI()
   tabPlayers.TextColor3 = Color3.new(1,1,1)
   tabPlayers.Font = Enum.Font.SourceSansBold
   tabPlayers.TextSize = 18
-  tabPlayers.Parent = mainFrame
   
-  local flightPanel = Instance.new("Frame")
+  local tabLighting = Instance.new("TextButton", mainFrame)
+  tabLighting.Name = "TabLighting"
+  tabLighting.Size = UDim2.new(0,tabWidth,0,30)
+  tabLighting.Position = UDim2.new(0,tabWidth*3,0,0)
+  tabLighting.BackgroundColor3 = Color3.fromRGB(100,100,100)
+  tabLighting.Text = "الإضاءة"
+  tabLighting.TextColor3 = Color3.new(1,1,1)
+  tabLighting.Font = Enum.Font.SourceSansBold
+  tabLighting.TextSize = 18
+  
+  local flightPanel = Instance.new("Frame", mainFrame)
   flightPanel.Name = "FlightPanel"
-  flightPanel.Size = UDim2.new(1,0,0,220)
+  flightPanel.Size = UDim2.new(1,0,0,260)
   flightPanel.Position = UDim2.new(0,0,0,30)
   flightPanel.BackgroundTransparency = 1
-  flightPanel.Parent = mainFrame
   
-  local flightToggle = Instance.new("TextButton")
+  local flightToggle = Instance.new("TextButton", flightPanel)
   flightToggle.Name = "FlightToggle"
   flightToggle.Size = UDim2.new(0,300,0,40)
   flightToggle.Position = UDim2.new(0,10,0,10)
@@ -319,9 +314,8 @@ local function createMainUI()
   flightToggle.TextColor3 = Color3.new(1,1,1)
   flightToggle.Font = Enum.Font.SourceSansBold
   flightToggle.TextSize = 20
-  flightToggle.Parent = flightPanel
   
-  local flightIncrease = Instance.new("TextButton")
+  local flightIncrease = Instance.new("TextButton", flightPanel)
   flightIncrease.Name = "FlightIncrease"
   flightIncrease.Size = UDim2.new(0,130,0,40)
   flightIncrease.Position = UDim2.new(0,10,0,70)
@@ -330,9 +324,8 @@ local function createMainUI()
   flightIncrease.TextColor3 = Color3.new(1,1,1)
   flightIncrease.Font = Enum.Font.SourceSansBold
   flightIncrease.TextSize = 20
-  flightIncrease.Parent = flightPanel
   
-  local flightDecrease = Instance.new("TextButton")
+  local flightDecrease = Instance.new("TextButton", flightPanel)
   flightDecrease.Name = "FlightDecrease"
   flightDecrease.Size = UDim2.new(0,130,0,40)
   flightDecrease.Position = UDim2.new(0,160,0,70)
@@ -341,9 +334,8 @@ local function createMainUI()
   flightDecrease.TextColor3 = Color3.new(1,1,1)
   flightDecrease.Font = Enum.Font.SourceSansBold
   flightDecrease.TextSize = 20
-  flightDecrease.Parent = flightPanel
   
-  local flightSpeedLabel = Instance.new("TextLabel")
+  local flightSpeedLabel = Instance.new("TextLabel", flightPanel)
   flightSpeedLabel.Name = "FlightSpeedLabel"
   flightSpeedLabel.Size = UDim2.new(0,300,0,30)
   flightSpeedLabel.Position = UDim2.new(0,10,0,130)
@@ -352,9 +344,8 @@ local function createMainUI()
   flightSpeedLabel.TextColor3 = Color3.new(1,1,1)
   flightSpeedLabel.Font = Enum.Font.SourceSansBold
   flightSpeedLabel.TextSize = 18
-  flightSpeedLabel.Parent = flightPanel
   
-  local flightSpeedInput = Instance.new("TextBox")
+  local flightSpeedInput = Instance.new("TextBox", flightPanel)
   flightSpeedInput.Name = "FlightSpeedInput"
   flightSpeedInput.Size = UDim2.new(0,100,0,30)
   flightSpeedInput.Position = UDim2.new(0,10,0,165)
@@ -363,9 +354,8 @@ local function createMainUI()
   flightSpeedInput.Font = Enum.Font.SourceSansBold
   flightSpeedInput.TextSize = 18
   flightSpeedInput.ClearTextOnFocus = false
-  flightSpeedInput.Parent = flightPanel
   
-  local flightSpeedSetButton = Instance.new("TextButton")
+  local flightSpeedSetButton = Instance.new("TextButton", flightPanel)
   flightSpeedSetButton.Name = "FlightSpeedSetButton"
   flightSpeedSetButton.Size = UDim2.new(0,150,0,30)
   flightSpeedSetButton.Position = UDim2.new(0,120,0,165)
@@ -374,17 +364,15 @@ local function createMainUI()
   flightSpeedSetButton.TextColor3 = Color3.new(1,1,1)
   flightSpeedSetButton.Font = Enum.Font.SourceSansBold
   flightSpeedSetButton.TextSize = 18
-  flightSpeedSetButton.Parent = flightPanel
   
-  local speedPanel = Instance.new("Frame")
+  local speedPanel = Instance.new("Frame", mainFrame)
   speedPanel.Name = "SpeedPanel"
-  speedPanel.Size = UDim2.new(1,0,0,220)
+  speedPanel.Size = UDim2.new(1,0,0,260)
   speedPanel.Position = UDim2.new(0,0,0,30)
   speedPanel.BackgroundTransparency = 1
   speedPanel.Visible = false
-  speedPanel.Parent = mainFrame
   
-  local speedToggle = Instance.new("TextButton")
+  local speedToggle = Instance.new("TextButton", speedPanel)
   speedToggle.Name = "SpeedToggle"
   speedToggle.Size = UDim2.new(0,300,0,40)
   speedToggle.Position = UDim2.new(0,10,0,10)
@@ -393,9 +381,8 @@ local function createMainUI()
   speedToggle.TextColor3 = Color3.new(1,1,1)
   speedToggle.Font = Enum.Font.SourceSansBold
   speedToggle.TextSize = 20
-  speedToggle.Parent = speedPanel
   
-  local speedIncrease = Instance.new("TextButton")
+  local speedIncrease = Instance.new("TextButton", speedPanel)
   speedIncrease.Name = "SpeedIncrease"
   speedIncrease.Size = UDim2.new(0,130,0,40)
   speedIncrease.Position = UDim2.new(0,10,0,70)
@@ -404,9 +391,8 @@ local function createMainUI()
   speedIncrease.TextColor3 = Color3.new(1,1,1)
   speedIncrease.Font = Enum.Font.SourceSansBold
   speedIncrease.TextSize = 20
-  speedIncrease.Parent = speedPanel
   
-  local speedDecrease = Instance.new("TextButton")
+  local speedDecrease = Instance.new("TextButton", speedPanel)
   speedDecrease.Name = "SpeedDecrease"
   speedDecrease.Size = UDim2.new(0,130,0,40)
   speedDecrease.Position = UDim2.new(0,160,0,70)
@@ -415,9 +401,8 @@ local function createMainUI()
   speedDecrease.TextColor3 = Color3.new(1,1,1)
   speedDecrease.Font = Enum.Font.SourceSansBold
   speedDecrease.TextSize = 20
-  speedDecrease.Parent = speedPanel
   
-  local speedLabel = Instance.new("TextLabel")
+  local speedLabel = Instance.new("TextLabel", speedPanel)
   speedLabel.Name = "SpeedLabel"
   speedLabel.Size = UDim2.new(0,300,0,30)
   speedLabel.Position = UDim2.new(0,10,0,170)
@@ -426,9 +411,8 @@ local function createMainUI()
   speedLabel.TextColor3 = Color3.new(1,1,1)
   speedLabel.Font = Enum.Font.SourceSansBold
   speedLabel.TextSize = 18
-  speedLabel.Parent = speedPanel
   
-  local speedInput = Instance.new("TextBox")
+  local speedInput = Instance.new("TextBox", speedPanel)
   speedInput.Name = "SpeedInput"
   speedInput.Size = UDim2.new(0,100,0,30)
   speedInput.Position = UDim2.new(0,10,0,130)
@@ -437,9 +421,8 @@ local function createMainUI()
   speedInput.Font = Enum.Font.SourceSansBold
   speedInput.TextSize = 18
   speedInput.ClearTextOnFocus = false
-  speedInput.Parent = speedPanel
   
-  local speedSetButton = Instance.new("TextButton")
+  local speedSetButton = Instance.new("TextButton", speedPanel)
   speedSetButton.Name = "SpeedSetButton"
   speedSetButton.Size = UDim2.new(0,150,0,30)
   speedSetButton.Position = UDim2.new(0,120,0,130)
@@ -448,17 +431,15 @@ local function createMainUI()
   speedSetButton.TextColor3 = Color3.new(1,1,1)
   speedSetButton.Font = Enum.Font.SourceSansBold
   speedSetButton.TextSize = 18
-  speedSetButton.Parent = speedPanel
   
-  local playersPanel = Instance.new("Frame")
+  local playersPanel = Instance.new("Frame", mainFrame)
   playersPanel.Name = "PlayersPanel"
-  playersPanel.Size = UDim2.new(1,0,0,220)
+  playersPanel.Size = UDim2.new(1,0,0,260)
   playersPanel.Position = UDim2.new(0,0,0,30)
   playersPanel.BackgroundTransparency = 1
   playersPanel.Visible = false
-  playersPanel.Parent = mainFrame
   
-  local playersToggle = Instance.new("TextButton")
+  local playersToggle = Instance.new("TextButton", playersPanel)
   playersToggle.Name = "PlayersToggle"
   playersToggle.Size = UDim2.new(0,300,0,40)
   playersToggle.Position = UDim2.new(0,10,0,10)
@@ -467,9 +448,8 @@ local function createMainUI()
   playersToggle.TextColor3 = Color3.new(1,1,1)
   playersToggle.Font = Enum.Font.SourceSansBold
   playersToggle.TextSize = 20
-  playersToggle.Parent = playersPanel
   
-  local vanishToggle = Instance.new("TextButton")
+  local vanishToggle = Instance.new("TextButton", playersPanel)
   vanishToggle.Name = "VanishToggle"
   vanishToggle.Size = UDim2.new(0,300,0,40)
   vanishToggle.Position = UDim2.new(0,10,0,60)
@@ -478,19 +458,16 @@ local function createMainUI()
   vanishToggle.TextColor3 = Color3.new(1,1,1)
   vanishToggle.Font = Enum.Font.SourceSansBold
   vanishToggle.TextSize = 20
-  vanishToggle.Parent = playersPanel
   
-  -- Create Player List Frame (draggable) inside playersPanel
-  playerListFrame = Instance.new("Frame")
+  playerListFrame = Instance.new("Frame", playersPanel)
   playerListFrame.Name = "PlayerListFrame"
   playerListFrame.Size = UDim2.new(0,300,0,100)
   playerListFrame.Position = UDim2.new(0,10,0,110)
   playerListFrame.BackgroundColor3 = Color3.fromRGB(50,50,50)
   playerListFrame.BorderSizePixel = 2
   playerListFrame.Draggable = true
-  playerListFrame.Parent = playersPanel
-
-  local framesLabel = Instance.new("TextLabel")
+  
+  local framesLabel = Instance.new("TextLabel", playerListFrame)
   framesLabel.Name = "FramesLabel"
   framesLabel.Size = UDim2.new(1,0,0,20)
   framesLabel.BackgroundTransparency = 0.5
@@ -498,15 +475,13 @@ local function createMainUI()
   framesLabel.TextColor3 = Color3.new(1,1,1)
   framesLabel.Font = Enum.Font.SourceSansBold
   framesLabel.TextSize = 16
-  framesLabel.Parent = playerListFrame
-
+  
   local listLayout = Instance.new("UIListLayout", playerListFrame)
   listLayout.FillDirection = Enum.FillDirection.Vertical
   listLayout.SortOrder = Enum.SortOrder.LayoutOrder
   listLayout.Padding = UDim.new(0,2)
   
-  -- Create Teleport Selected Button for list
-  teleportSelectedButton = Instance.new("TextButton")
+  teleportSelectedButton = Instance.new("TextButton", playersPanel)
   teleportSelectedButton.Name = "TeleportSelectedButton"
   teleportSelectedButton.Size = UDim2.new(0,150,0,30)
   teleportSelectedButton.Position = UDim2.new(0,320,0,110)
@@ -515,9 +490,7 @@ local function createMainUI()
   teleportSelectedButton.TextColor3 = Color3.new(1,1,1)
   teleportSelectedButton.Font = Enum.Font.SourceSansBold
   teleportSelectedButton.TextSize = 18
-  teleportSelectedButton.Parent = playersPanel
   
-  -- تعديل وظيفة زر الانتقال لتفعيل/إلغاء الانتقال اللاصق
   teleportSelectedButton.MouseButton1Click:Connect(function()
     if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("Head") then
       stickyTeleportActive = not stickyTeleportActive
@@ -529,49 +502,45 @@ local function createMainUI()
     end
   end)
   
-  -- Create Pull Button ("سحب") under the teleport button.
-  local pullButton = Instance.new("TextButton")
+  local pullButton = Instance.new("TextButton", playersPanel)
   pullButton.Name = "PullButton"
   pullButton.Size = UDim2.new(0,150,0,30)
-  pullButton.Position = UDim2.new(0,320,0,150)  -- Adjust position as needed.
+  pullButton.Position = UDim2.new(0,320,0,150)
   pullButton.BackgroundColor3 = Color3.fromRGB(150,50,150)
   pullButton.Text = "سحب"
   pullButton.TextColor3 = Color3.new(1,1,1)
   pullButton.Font = Enum.Font.SourceSansBold
   pullButton.TextSize = 18
-  pullButton.Parent = playersPanel
-
+  -- Modified Pull Toggle: When clicked, toggles continuous pull.
   pullButton.MouseButton1Click:Connect(function()
     if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
-      local myCharacter = getCharacter()
-      if myCharacter and myCharacter:FindFirstChild("HumanoidRootPart") then
-        local pullPos = myCharacter.HumanoidRootPart.Position + Vector3.new(0,5,0)
-        selectedPlayer.Character:MoveTo(pullPos)
+      pullActive = not pullActive
+      if pullActive then
+        pullButton.Text = "إلغاء السحب"
+      else
+        pullButton.Text = "سحب"
+        -- عند إيقاف السحب نترك اللاعب المُسحب في آخر موقع تم نقله إليه دون استرجاعه
       end
     end
   end)
   
-  -- Create Spectate Button ("مراقبه") under the pull button.
-  local spectateButton = Instance.new("TextButton")
+  local spectateButton = Instance.new("TextButton", playersPanel)
   spectateButton.Name = "SpectateButton"
   spectateButton.Size = UDim2.new(0,150,0,30)
-  spectateButton.Position = UDim2.new(0,320,0,190)  -- Position adjusted under "سحب"
+  spectateButton.Position = UDim2.new(0,320,0,190)
   spectateButton.BackgroundColor3 = Color3.fromRGB(255,165,0)
   spectateButton.Text = "مراقبه"
   spectateButton.TextColor3 = Color3.new(1,1,1)
   spectateButton.Font = Enum.Font.SourceSansBold
   spectateButton.TextSize = 18
-  spectateButton.Parent = playersPanel
-
+  
   spectateButton.MouseButton1Click:Connect(function()
     if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("Head") then
       if not spectateActive then
-        -- تغيير كاميرا اللعبة لتتابع رأس اللاعب المُختار
         Workspace.CurrentCamera.CameraSubject = selectedPlayer.Character.Head
         spectateActive = true
         spectateButton.Text = "إلغاء المراقبه"
       else
-        -- الرجوع إلى كاميرا شخصيتك
         local character = getCharacter()
         if character and character:FindFirstChild("Humanoid") then
           Workspace.CurrentCamera.CameraSubject = character.Humanoid
@@ -582,15 +551,79 @@ local function createMainUI()
     end
   end)
   
+  local lightingPanel = Instance.new("Frame", mainFrame)
+  lightingPanel.Name = "LightingPanel"
+  lightingPanel.Size = UDim2.new(1,0,0,260)
+  lightingPanel.Position = UDim2.new(0,0,0,30)
+  lightingPanel.BackgroundTransparency = 1
+  lightingPanel.Visible = false
+  
+  local lightLabel = Instance.new("TextLabel", lightingPanel)
+  lightLabel.Name = "LightLabel"
+  lightLabel.Size = UDim2.new(0,300,0,30)
+  lightLabel.Position = UDim2.new(0,10,0,20)
+  lightLabel.BackgroundTransparency = 1
+  lightLabel.Text = "سطوع اللعبة الحالي: " .. Lighting.Brightness
+  lightLabel.TextColor3 = Color3.new(1,1,1)
+  lightLabel.Font = Enum.Font.SourceSansBold
+  lightLabel.TextSize = 18
+  
+  local lightIncrease = Instance.new("TextButton", lightingPanel)
+  lightIncrease.Name = "LightIncrease"
+  lightIncrease.Size = UDim2.new(0,130,0,40)
+  lightIncrease.Position = UDim2.new(0,10,0,70)
+  lightIncrease.BackgroundColor3 = Color3.fromRGB(34,139,34)
+  lightIncrease.Text = "زيادة الإضاءة"
+  lightIncrease.TextColor3 = Color3.new(1,1,1)
+  lightIncrease.Font = Enum.Font.SourceSansBold
+  lightIncrease.TextSize = 20
+  
+  local lightDecrease = Instance.new("TextButton", lightingPanel)
+  lightDecrease.Name = "LightDecrease"
+  lightDecrease.Size = UDim2.new(0,130,0,40)
+  lightDecrease.Position = UDim2.new(0,160,0,70)
+  lightDecrease.BackgroundColor3 = Color3.fromRGB(178,34,34)
+  lightDecrease.Text = "تقليل الإضاءة"
+  lightDecrease.TextColor3 = Color3.new(1,1,1)
+  lightDecrease.Font = Enum.Font.SourceSansBold
+  lightDecrease.TextSize = 20
+  
+  local lightInput = Instance.new("TextBox", lightingPanel)
+  lightInput.Name = "LightInput"
+  lightInput.Size = UDim2.new(0,100,0,30)
+  lightInput.Position = UDim2.new(0,10,0,130)
+  lightInput.BackgroundColor3 = Color3.fromRGB(255,255,255)
+  lightInput.Text = tostring(Lighting.Brightness)
+  lightInput.Font = Enum.Font.SourceSansBold
+  lightInput.TextSize = 18
+  lightInput.ClearTextOnFocus = false
+  
+  local lightSetButton = Instance.new("TextButton", lightingPanel)
+  lightSetButton.Name = "LightSetButton"
+  lightSetButton.Size = UDim2.new(0,150,0,30)
+  lightSetButton.Position = UDim2.new(0,120,0,130)
+  lightSetButton.BackgroundColor3 = Color3.fromRGB(70,130,180)
+  lightSetButton.Text = "تحديث الإضاءة"
+  lightSetButton.TextColor3 = Color3.new(1,1,1)
+  lightSetButton.Font = Enum.Font.SourceSansBold
+  lightSetButton.TextSize = 18
+  
   return {
     mainFrame = mainFrame,
     closeButton = closeButton,
     tabFlight = tabFlight,
     tabSpeed = tabSpeed,
     tabPlayers = tabPlayers,
+    tabLighting = tabLighting,
     flightPanel = flightPanel,
     speedPanel = speedPanel,
     playersPanel = playersPanel,
+    lightingPanel = lightingPanel,
+    lightLabel = lightLabel,
+    lightIncrease = lightIncrease,
+    lightDecrease = lightDecrease,
+    lightInput = lightInput,
+    lightSetButton = lightSetButton,
     flightToggle = flightToggle,
     flightIncrease = flightIncrease,
     flightDecrease = flightDecrease,
@@ -605,7 +638,8 @@ local function createMainUI()
     speedSetButton = speedSetButton,
     playersToggle = playersToggle,
     vanishToggle = vanishToggle,
-    teleportSelectedButton = teleportSelectedButton
+    teleportSelectedButton = teleportSelectedButton,
+    pullButton = pullButton
   }
 end
 
@@ -613,6 +647,7 @@ local ui = createMainUI()
 
 ---------------------------------------------
 -- Helper: Update Player List in the List Frame
+-- يتم الآن عرض جميع اللاعبين حتى وإن لم تحمل شخصياتهم بعد.
 ---------------------------------------------
 local function updatePlayerList()
   if not playerListFrame then return end
@@ -622,12 +657,20 @@ local function updatePlayerList()
     end
   end
   for _, p in ipairs(Players:GetPlayers()) do
-    if p ~= player and p.Character and p.Character:FindFirstChild("Head") then
+    if p ~= player then
       local button = Instance.new("TextButton")
       button.Name = "PlayerButton_" .. p.Name
       button.Size = UDim2.new(1,0,0,25)
       button.BackgroundColor3 = Color3.fromRGB(100,100,100)
-      button.Text = p.Name
+      if not p.Character or not p.Character:FindFirstChild("Head") then
+        button.Text = p.Name .. " (لم تحمل)"
+        p.CharacterAdded:Connect(function(character)
+          wait(1)
+          button.Text = p.Name
+        end)
+      else
+        button.Text = p.Name
+      end
       button.TextColor3 = Color3.new(1,1,1)
       button.Font = Enum.Font.SourceSansBold
       button.TextSize = 18
@@ -653,33 +696,74 @@ local function showFlightPanel()
   ui.flightPanel.Visible = true
   ui.speedPanel.Visible = false
   ui.playersPanel.Visible = false
+  ui.lightingPanel.Visible = false
   ui.tabFlight.BackgroundColor3 = Color3.fromRGB(70,130,180)
   ui.tabSpeed.BackgroundColor3 = Color3.fromRGB(100,100,100)
   ui.tabPlayers.BackgroundColor3 = Color3.fromRGB(100,100,100)
+  ui.tabLighting.BackgroundColor3 = Color3.fromRGB(100,100,100)
 end
 
 local function showSpeedPanel()
   ui.flightPanel.Visible = false
   ui.speedPanel.Visible = true
   ui.playersPanel.Visible = false
+  ui.lightingPanel.Visible = false
   ui.tabFlight.BackgroundColor3 = Color3.fromRGB(100,100,100)
   ui.tabSpeed.BackgroundColor3 = Color3.fromRGB(70,130,180)
   ui.tabPlayers.BackgroundColor3 = Color3.fromRGB(100,100,100)
+  ui.tabLighting.BackgroundColor3 = Color3.fromRGB(100,100,100)
 end
 
 local function showPlayersPanel()
   ui.flightPanel.Visible = false
   ui.speedPanel.Visible = false
   ui.playersPanel.Visible = true
+  ui.lightingPanel.Visible = false
   ui.tabFlight.BackgroundColor3 = Color3.fromRGB(100,100,100)
   ui.tabSpeed.BackgroundColor3 = Color3.fromRGB(100,100,100)
   ui.tabPlayers.BackgroundColor3 = Color3.fromRGB(70,130,180)
+  ui.tabLighting.BackgroundColor3 = Color3.fromRGB(100,100,100)
   updatePlayerList()
+end
+
+local function showLightingPanel()
+  ui.flightPanel.Visible = false
+  ui.speedPanel.Visible = false
+  ui.playersPanel.Visible = false
+  ui.lightingPanel.Visible = true
+  ui.tabFlight.BackgroundColor3 = Color3.fromRGB(100,100,100)
+  ui.tabSpeed.BackgroundColor3 = Color3.fromRGB(100,100,100)
+  ui.tabPlayers.BackgroundColor3 = Color3.fromRGB(100,100,100)
+  ui.tabLighting.BackgroundColor3 = Color3.fromRGB(70,130,180)
+  ui.lightLabel.Text = "سطوع اللعبة الحالي: " .. Lighting.Brightness
+  ui.lightInput.Text = tostring(Lighting.Brightness)
 end
 
 ui.tabFlight.MouseButton1Click:Connect(function() showFlightPanel() end)
 ui.tabSpeed.MouseButton1Click:Connect(function() showSpeedPanel() end)
 ui.tabPlayers.MouseButton1Click:Connect(function() showPlayersPanel() end)
+ui.tabLighting.MouseButton1Click:Connect(function() showLightingPanel() end)
+
+---------------------------------------------
+-- Lighting Controls
+---------------------------------------------
+ui.lightIncrease.MouseButton1Click:Connect(function()
+  increaseLighting()
+  ui.lightLabel.Text = "سطوع اللعبة الحالي: " .. Lighting.Brightness
+  ui.lightInput.Text = tostring(Lighting.Brightness)
+end)
+
+ui.lightDecrease.MouseButton1Click:Connect(function()
+  decreaseLighting()
+  ui.lightLabel.Text = "سطوع اللعبة الحالي: " .. Lighting.Brightness
+  ui.lightInput.Text = tostring(Lighting.Brightness)
+end)
+
+ui.lightSetButton.MouseButton1Click:Connect(function()
+  setLighting(ui.lightInput.Text)
+  ui.lightLabel.Text = "سطوع اللعبة الحالي: " .. Lighting.Brightness
+  ui.lightInput.Text = tostring(Lighting.Brightness)
+end)
 
 ---------------------------------------------
 -- Close UI Function
@@ -796,11 +880,11 @@ ui.speedSetButton.MouseButton1Click:Connect(function()
 end)
 
 ---------------------------------------------
--- Players Tab Functions (Circles, Vanish, Teleport & List)
+-- Players Tab Functions (Circles, Vanish, Teleport, etc.)
 ---------------------------------------------
 local function updatePlayerCircles()
   local cam = Workspace.CurrentCamera
-  local threshold = 150 -- يظهر الدائرة فقط إذا كانت المسافة أقل من 150 وحدة.
+  local threshold = 150
   for _, currentPlayer in ipairs(Players:GetPlayers()) do
     if currentPlayer ~= player and currentPlayer.Character and currentPlayer.Character:FindFirstChild("Head") then
       local head = currentPlayer.Character.Head
@@ -839,9 +923,18 @@ end
 local function enablePlayerCircles()
   playersCirclesEnabled = true
   for _, currentPlayer in ipairs(Players:GetPlayers()) do
-    if currentPlayer ~= player and currentPlayer.Character and currentPlayer.Character:FindFirstChild("Head") then
-      if not playerCircles[currentPlayer] then
-        playerCircles[currentPlayer] = createCircle()
+    if currentPlayer ~= player then
+      if currentPlayer.Character and currentPlayer.Character:FindFirstChild("Head") then
+        if not playerCircles[currentPlayer] then
+          playerCircles[currentPlayer] = createCircle()
+        end
+      else
+        currentPlayer.CharacterAdded:Connect(function(character)
+          wait(1)
+          if character:FindFirstChild("Head") and not playerCircles[currentPlayer] then
+            playerCircles[currentPlayer] = createCircle()
+          end
+        end)
       end
     end
   end
@@ -907,7 +1000,6 @@ Players.PlayerRemoving:Connect(function(leavingPlayer)
   updatePlayerList()
 end)
 
--- Vanish Option Toggle (for your character)
 ui.playersPanel.VanishToggle.MouseButton1Click:Connect(function()
   vanishActive = not vanishActive
   if vanishActive then
@@ -919,7 +1011,7 @@ ui.playersPanel.VanishToggle.MouseButton1Click:Connect(function()
   end
 end)
 
--- Teleport on Circle Click (يبقى كما هو التفعيل لمرة واحدة)
+-- Teleport on Circle Click
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
   if input.UserInputType == Enum.UserInputType.MouseButton1 and not gameProcessed then
     local mousePos = UserInputService:GetMouseLocation()
@@ -1011,7 +1103,7 @@ RunService.RenderStepped:Connect(function(deltaTime)
       bodyGyro.CFrame = cam.CFrame
     end
   end
-
+  
   if autoIncreasingFlight then
     autoIncreaseAccumulatorFlight = autoIncreaseAccumulatorFlight + deltaTime
     while autoIncreaseAccumulatorFlight >= autoIncreaseInterval do
@@ -1019,7 +1111,7 @@ RunService.RenderStepped:Connect(function(deltaTime)
       autoIncreaseAccumulatorFlight = autoIncreaseAccumulatorFlight - autoIncreaseInterval
     end
   end
-
+  
   if autoIncreasingSpeed then
     autoIncreaseAccumulatorSpeed = autoIncreaseAccumulatorSpeed + deltaTime
     while autoIncreaseAccumulatorSpeed >= autoIncreaseInterval do
@@ -1027,22 +1119,37 @@ RunService.RenderStepped:Connect(function(deltaTime)
       autoIncreaseAccumulatorSpeed = autoIncreaseAccumulatorSpeed - autoIncreaseInterval
     end
   end
-
+  
   if playersCirclesEnabled then
     updatePlayerCircles()
   end
-
-  -- الكود الجديد للانتقال اللاصق:
+  
+  -- Improved Sticky Teleport:
   if stickyTeleportActive then
     if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("Head") then
       local targetPos = selectedPlayer.Character.Head.Position + Vector3.new(0,5,0)
       local myCharacter = getCharacter()
-      if myCharacter then
-        myCharacter:MoveTo(targetPos)
+      if myCharacter and myCharacter:FindFirstChild("HumanoidRootPart") then
+        local currentPos = myCharacter.HumanoidRootPart.Position
+        if (currentPos - targetPos).Magnitude > 5 then
+          pcall(function()
+            myCharacter:MoveTo(targetPos)
+          end)
+        end
       end
-    else
-      stickyTeleportActive = false
-      ui.teleportSelectedButton.Text = "انتقال"
+    end
+  end
+  
+  -- Continuous Pull Functionality:
+  if pullActive then
+    if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
+      local myCharacter = getCharacter()
+      if myCharacter and myCharacter:FindFirstChild("HumanoidRootPart") then
+        local pullPos = myCharacter.HumanoidRootPart.Position + Vector3.new(0,5,0)
+        pcall(function()
+          selectedPlayer.Character:MoveTo(pullPos)
+        end)
+      end
     end
   end
 end)
