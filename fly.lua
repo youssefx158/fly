@@ -16,6 +16,10 @@
     - Use shortcuts (e.g. F for toggling flight, CTRL to toggle UI).
     - In the Players tab, use the "انتقال" button to toggle sticky teleportation.
     - In the Lighting tab, adjust game brightness as needed.
+
+  NOTE:
+    - This version places the ScreenGui under CoreGui to ensure it stays above the Roblox Esc menu.
+    - This might be considered an exploit in some contexts, so be mindful of game policy.
 --]]
 
 ---------------------------------------------
@@ -26,6 +30,8 @@ local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")  -- لاستخدام CoreGui بدل PlayerGui
+
 local player = Players.LocalPlayer
 
 ---------------------------------------------
@@ -232,12 +238,17 @@ end
 -- UI Creation Function: Main Tabs (Flight, Speed, Players, Lighting)
 ---------------------------------------------
 local function createMainUI()
-  local playerGui = player:WaitForChild("PlayerGui")
+  -- بدلاً من PlayerGui سنستخدم CoreGui
   local screenGui = Instance.new("ScreenGui")
   screenGui.Name = "FlightSpeedUI"
   screenGui.ResetOnSpawn = false
-  screenGui.Parent = playerGui
+  screenGui.IgnoreGuiInset = true
+  -- نرفعه في DisplayOrder و ZIndexBehavior
+  screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+  screenGui.DisplayOrder = 999999
   
+  screenGui.Parent = CoreGui  -- وضعه في CoreGui
+
   local mainFrame = Instance.new("Frame")
   mainFrame.Name = "MainFrame"
   mainFrame.Size = UDim2.new(0,350,0,300)
@@ -511,7 +522,6 @@ local function createMainUI()
   pullButton.TextColor3 = Color3.new(1,1,1)
   pullButton.Font = Enum.Font.SourceSansBold
   pullButton.TextSize = 18
-  -- Modified Pull Toggle: When clicked, toggles continuous pull.
   pullButton.MouseButton1Click:Connect(function()
     if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("HumanoidRootPart") then
       pullActive = not pullActive
@@ -519,7 +529,6 @@ local function createMainUI()
         pullButton.Text = "إلغاء السحب"
       else
         pullButton.Text = "سحب"
-        -- عند إيقاف السحب نترك اللاعب المُسحب في آخر موقع تم نقله إليه دون استرجاعه
       end
     end
   end)
@@ -647,7 +656,6 @@ local ui = createMainUI()
 
 ---------------------------------------------
 -- Helper: Update Player List in the List Frame
--- يتم الآن عرض جميع اللاعبين حتى وإن لم تحمل شخصياتهم بعد.
 ---------------------------------------------
 local function updatePlayerList()
   if not playerListFrame then return end
