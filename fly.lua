@@ -1,22 +1,22 @@
 --[[
-  Integrated script for Roblox games (e.g. Blox Fruits) that includes:
-    - Flight mode with adjustable speed and phasing through walls.
-    - WalkSpeed adjustment (Speed Boost).
-    - Players tab: Draw circles around players, vanish option, teleport (sticky teleport), pull, and spectate.
+  Integrated script for Roblox games (e.g. Blox Fruits) with advanced features:
+    - Flight mode with adjustable speed and wall phasing.
+    - WalkSpeed (Speed Boost) adjustment.
+    - Players tab: Draw circles around players, vanish, sticky teleport, pull, and spectate.
     - Lighting tab: Adjust game brightness (increase, decrease, or set a specific value).
 
-  Sticky Teleport:
-    Continuously checks if the selected player is valid. If available (has a Character with a Head),
-    your character will be teleported to them. If the target dies or is temporarily unavailable,
-    the script will wait until they respawn—unless you cancel sticky teleport.
-
+  Advanced Sticky Teleport:
+    - Precisely teleports your character to the target player's head position.
+    - Reinitializes automatically on respawn or if your character is displaced.
+    - Resets every 10 seconds with a brief notification (0.25 sec) to ensure continuous integration.
+  
   NOTE:
-    - This version places the ScreenGui in CoreGui to ensure it stays above other interfaces.
-    - All active tasks (flight, speed boost, pull, etc.) will be disabled when the close button is pressed.
+    - The ScreenGui is placed in CoreGui.
+    - All active tasks (flight, speed boost, pull, etc.) are disabled when the close button is pressed.
     
   Instructions:
     - Place this LocalScript in StarterPlayer > StarterPlayerScripts.
-    - Also, add the provided Server Script (below) in ServerScriptService.
+    - Add the corresponding Server Script in ServerScriptService.
 --]]
 
 ---------------------------------------------
@@ -30,8 +30,7 @@ local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
--- إنشاء RemoteEvent للسحب إذا لم يكن موجوداً
-local pullEvent = ReplicatedStorage:FindFirstChild("PullEvent") 
+local pullEvent = ReplicatedStorage:FindFirstChild("PullEvent")
 if not pullEvent then
     pullEvent = Instance.new("RemoteEvent", ReplicatedStorage)
     pullEvent.Name = "PullEvent"
@@ -43,21 +42,21 @@ local player = Players.LocalPlayer
 -- Flight Variables
 ---------------------------------------------
 local flying = false
-local flightSpeed = 50             -- سرعة الطيران الحالية.
-local flightSpeedIncrement = 10    -- قيمة الزيادة.
+local flightSpeed = 50
+local flightSpeedIncrement = 10
 local bodyGyro, bodyVelocity
 local flightControl = { N = false, S = false, E = false, W = false, Up = false, Down = false }
 
 ---------------------------------------------
--- Speed (WalkSpeed) Variables
+-- WalkSpeed Variables
 ---------------------------------------------
 local speedBoostActive = false
-local boostedSpeed = 50            -- السرعة الحالية.
-local speedIncrement = 5           -- قيمة الزيادة.
-local originalWalkSpeed = 16       -- سرعة المشي الافتراضية.
+local boostedSpeed = 50
+local speedIncrement = 5
+local originalWalkSpeed = 16
 
 ---------------------------------------------
--- Auto-Increase Variables (لزيادة السرعة عند الضغط)
+-- Auto-Increase Variables
 ---------------------------------------------
 local autoIncreasingFlight = false
 local autoIncreaseAccumulatorFlight = 0
@@ -66,27 +65,43 @@ local autoIncreaseAccumulatorSpeed = 0
 local autoIncreaseInterval = 0.1
 
 ---------------------------------------------
--- Players Tab Variables, Vanish, Teleport, Pull, etc.
+-- Players Tab Variables
 ---------------------------------------------
 local playersCirclesEnabled = false
-local playerCircles = {}         -- لتخزين دوائر اللاعبين
-local nameLabels = {}            -- لتخزين ملصقات أسماء اللاعبين
+local playerCircles = {}    -- store player circles
+local nameLabels = {}       -- store name labels
 local vanishActive = false
 
--- المتغيرات الخاصة بقائمة اللاعبين:
-local selectedPlayer = nil       -- اللاعب المختار.
-local pulledPlayers = {}         -- جدول لتخزين اللاعبين الذين تم سحبهم.
-local playerListFrame = nil      -- إطار قائمة اللاعبين.
-local teleportSelectedButton = nil  -- زر الانتقال.
+local selectedPlayer = nil  -- target player
+local pulledPlayers = {}    -- pulled players table
+local playerListFrame = nil
+local teleportSelectedButton = nil
 
--- متغيرات الانتقال والمراقبة:
 local stickyTeleportActive = false
 local spectateActive = false
 
 ---------------------------------------------
 -- Lighting Variables
 ---------------------------------------------
-local brightnessIncrement = 0.5    -- قيمة زيادة الإضاءة.
+local brightnessIncrement = 0.5
+
+---------------------------------------------
+-- UI Notification Function
+---------------------------------------------
+local function showNotification(message, duration)
+    local notif = Instance.new("TextLabel")
+    notif.Name = "StickyTeleportNotif"
+    notif.Size = UDim2.new(0, 300, 0, 50)
+    notif.Position = UDim2.new(0.5, -150, 0.5, -25)
+    notif.BackgroundTransparency = 0.5
+    notif.BackgroundColor3 = Color3.new(0, 0, 0)
+    notif.Text = message
+    notif.TextColor3 = Color3.new(1, 1, 1)
+    notif.TextScaled = true
+    notif.Font = Enum.Font.SourceSansBold
+    notif.Parent = CoreGui
+    delay(duration, function() notif:Destroy() end)
+end
 
 ---------------------------------------------
 -- Helper Functions
@@ -95,10 +110,10 @@ local function createCircle()
   local circle = Drawing.new("Circle")
   circle.Visible = true
   circle.Transparency = 1
-  circle.Color = Color3.new(0, 1, 0)      -- أخضر.
+  circle.Color = Color3.new(0, 1, 0)
   circle.Thickness = 2
   circle.NumSides = 100
-  circle.Radius = 50                     -- يمكنك تعديلها حسب الـ FOV.
+  circle.Radius = 50
   return circle
 end
 
@@ -130,9 +145,7 @@ end
 ---------------------------------------------
 local function enableFlight(character)
   local humanoid = character:FindFirstChildOfClass("Humanoid")
-  if humanoid then
-    humanoid.PlatformStand = true
-  end
+  if humanoid then humanoid.PlatformStand = true end
   local root = character:WaitForChild("HumanoidRootPart")
   
   local gyro = Instance.new("BodyGyro", root)
@@ -149,15 +162,12 @@ local function enableFlight(character)
       pcall(function() part.CanCollide = false end)
     end
   end
-  
   return gyro, velocity
 end
 
 local function disableFlight(character, gyro, velocity)
   local humanoid = character:FindFirstChildOfClass("Humanoid")
-  if humanoid then
-    humanoid.PlatformStand = false
-  end
+  if humanoid then humanoid.PlatformStand = false end
   if gyro then gyro:Destroy() end
   if velocity then velocity:Destroy() end
   
@@ -183,9 +193,7 @@ end
 local function disableSpeedBoost()
   local character = getCharacter()
   local humanoid = character:FindFirstChildOfClass("Humanoid")
-  if humanoid then
-    humanoid.WalkSpeed = originalWalkSpeed
-  end
+  if humanoid then humanoid.WalkSpeed = originalWalkSpeed end
 end
 
 ---------------------------------------------
@@ -200,9 +208,7 @@ local function enableVanish()
       pcall(function() part.Transparency = 1 end)
     end
   end
-  if character:FindFirstChild("Animate") then
-    character.Animate.Disabled = true
-  end
+  if character:FindFirstChild("Animate") then character.Animate.Disabled = true end
 end
 
 local function disableVanish()
@@ -214,9 +220,7 @@ local function disableVanish()
       pcall(function() part.Transparency = 0 end)
     end
   end
-  if character:FindFirstChild("Animate") then
-    character.Animate.Disabled = false
-  end
+  if character:FindFirstChild("Animate") then character.Animate.Disabled = false end
 end
 
 ---------------------------------------------
@@ -234,9 +238,7 @@ end
 
 local function setLighting(value)
   local newVal = tonumber(value)
-  if newVal then
-    Lighting.Brightness = newVal
-  end
+  if newVal then Lighting.Brightness = newVal end
 end
 
 ---------------------------------------------
@@ -259,14 +261,13 @@ local function createMainUI()
   mainFrame.BackgroundTransparency = 0.2
   mainFrame.Active = true
   mainFrame.Draggable = true
-  mainFrame.ClipsDescendants = false  -- يسمح بعرض العناصر خارج النافذة
+  mainFrame.ClipsDescendants = false
   mainFrame.Parent = screenGui
   
-  -- زر "X" خارج النافذة، يظل متحرك مع النافذة
   local closeButton = Instance.new("TextButton", mainFrame)
   closeButton.Name = "CloseButton"
   closeButton.Size = UDim2.new(0,40,0,40)
-  closeButton.Position = UDim2.new(1, 5, 0, -5)  -- يظهر خارج حدود MainFrame
+  closeButton.Position = UDim2.new(1, 5, 0, -5)
   closeButton.BackgroundColor3 = Color3.fromRGB(220,20,60)
   closeButton.Text = "X"
   closeButton.TextColor3 = Color3.new(1,1,1)
@@ -475,32 +476,39 @@ local function createMainUI()
   vanishToggle.Font = Enum.Font.SourceSansBold
   vanishToggle.TextSize = 20
   
-  playerListFrame = Instance.new("Frame", playersPanel)
+  -- إضافة مربع البحث لقائمة اللاعبين
+  local searchBox = Instance.new("TextBox", playersPanel)
+  searchBox.Name = "SearchBox"
+  searchBox.Size = UDim2.new(0,300,0,30)
+  searchBox.Position = UDim2.new(0,10,0,110)
+  searchBox.BackgroundColor3 = Color3.fromRGB(255,255,255)
+  searchBox.PlaceholderText = "ابحث عن اللاعب"
+  searchBox.Text = ""
+  searchBox.TextScaled = true
+  searchBox.Font = Enum.Font.SourceSansBold
+  
+  -- تحويل إطار قائمة اللاعبين إلى ScrollingFrame
+  playerListFrame = Instance.new("ScrollingFrame", playersPanel)
   playerListFrame.Name = "PlayerListFrame"
   playerListFrame.Size = UDim2.new(0,300,0,100)
-  playerListFrame.Position = UDim2.new(0,10,0,110)
+  playerListFrame.Position = UDim2.new(0,10,0,150)
   playerListFrame.BackgroundColor3 = Color3.fromRGB(50,50,50)
   playerListFrame.BorderSizePixel = 2
-  playerListFrame.Draggable = true
-  
-  local framesLabel = Instance.new("TextLabel", playerListFrame)
-  framesLabel.Name = "FramesLabel"
-  framesLabel.Size = UDim2.new(1,0,0,20)
-  framesLabel.BackgroundTransparency = 0.5
-  framesLabel.Text = "الفريمات"
-  framesLabel.TextColor3 = Color3.new(1,1,1)
-  framesLabel.Font = Enum.Font.SourceSansBold
-  framesLabel.TextSize = 16
+  playerListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+  playerListFrame.ScrollBarThickness = 8
   
   local listLayout = Instance.new("UIListLayout", playerListFrame)
   listLayout.FillDirection = Enum.FillDirection.Vertical
   listLayout.SortOrder = Enum.SortOrder.LayoutOrder
   listLayout.Padding = UDim.new(0,2)
+  listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+      playerListFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y)
+  end)
   
   teleportSelectedButton = Instance.new("TextButton", playersPanel)
   teleportSelectedButton.Name = "TeleportSelectedButton"
   teleportSelectedButton.Size = UDim2.new(0,150,0,30)
-  teleportSelectedButton.Position = UDim2.new(0,320,0,110)
+  teleportSelectedButton.Position = UDim2.new(0,320,0,150)
   teleportSelectedButton.BackgroundColor3 = Color3.fromRGB(70,130,180)
   teleportSelectedButton.Text = "انتقال"
   teleportSelectedButton.TextColor3 = Color3.new(1,1,1)
@@ -521,7 +529,7 @@ local function createMainUI()
   local pullButton = Instance.new("TextButton", playersPanel)
   pullButton.Name = "PullButton"
   pullButton.Size = UDim2.new(0,150,0,30)
-  pullButton.Position = UDim2.new(0,320,0,150)
+  pullButton.Position = UDim2.new(0,320,0,190)
   pullButton.BackgroundColor3 = Color3.fromRGB(150,50,150)
   pullButton.Text = "سحب"
   pullButton.TextColor3 = Color3.new(1,1,1)
@@ -543,7 +551,7 @@ local function createMainUI()
   local spectateButton = Instance.new("TextButton", playersPanel)
   spectateButton.Name = "SpectateButton"
   spectateButton.Size = UDim2.new(0,150,0,30)
-  spectateButton.Position = UDim2.new(0,320,0,190)
+  spectateButton.Position = UDim2.new(0,320,0,230)
   spectateButton.BackgroundColor3 = Color3.fromRGB(255,165,0)
   spectateButton.Text = "مراقبه"
   spectateButton.TextColor3 = Color3.new(1,1,1)
@@ -662,49 +670,60 @@ end
 local ui = createMainUI()
 
 ---------------------------------------------
--- Helper: Update Player List in the List Frame
+-- Helper: Update Player List in the List Frame with Search Filter
 ---------------------------------------------
 local function updatePlayerList()
   if not playerListFrame then return end
   for _, child in ipairs(playerListFrame:GetChildren()) do
-    if child:IsA("TextButton") then
-      child:Destroy()
-    end
+    if child:IsA("TextButton") then child:Destroy() end
+  end
+  local searchQuery = ""
+  local searchBox = ui.playersPanel:FindFirstChild("SearchBox")
+  if searchBox then
+    searchQuery = searchBox.Text:lower()
   end
   for _, p in ipairs(Players:GetPlayers()) do
     if p ~= player then
-      local button = Instance.new("TextButton")
-      button.Name = "PlayerButton_" .. p.Name
-      button.Size = UDim2.new(1,0,0,25)
-      button.BackgroundColor3 = Color3.fromRGB(100,100,100)
-      local text = p.Name
-      if not p.Character or not p.Character:FindFirstChild("Head") then
-        text = text .. " (لم تحمل)"
-        p.CharacterAdded:Connect(function(character)
-          wait(1)
-          button.Text = p.Name .. (pulledPlayers[p.Name] and " - سحب" or "")
+      if searchQuery == "" or string.find(p.Name:lower(), searchQuery) then
+        local button = Instance.new("TextButton")
+        button.Name = "PlayerButton_" .. p.Name
+        button.Size = UDim2.new(1,0,0,25)
+        button.BackgroundColor3 = Color3.fromRGB(100,100,100)
+        local text = p.Name
+        if not p.Character or not p.Character:FindFirstChild("Head") then
+          text = text .. " (لم تحمل)"
+          p.CharacterAdded:Connect(function(character)
+            wait(1)
+            button.Text = p.Name .. (pulledPlayers[p.Name] and " - سحب" or "")
+          end)
+        end
+        if pulledPlayers[p.Name] then text = text .. " - سحب" end
+        button.Text = text
+        button.TextColor3 = Color3.new(1,1,1)
+        button.Font = Enum.Font.SourceSansBold
+        button.TextSize = 18
+        button.Parent = playerListFrame
+        
+        button.MouseButton1Click:Connect(function()
+          selectedPlayer = p
+          for _, child in ipairs(playerListFrame:GetChildren()) do
+            if child:IsA("TextButton") then child.BackgroundColor3 = Color3.fromRGB(100,100,100) end
+          end
+          button.BackgroundColor3 = Color3.fromRGB(0,200,0)
         end)
       end
-      if pulledPlayers[p.Name] then
-        text = text .. " - سحب"
-      end
-      button.Text = text
-      button.TextColor3 = Color3.new(1,1,1)
-      button.Font = Enum.Font.SourceSansBold
-      button.TextSize = 18
-      button.Parent = playerListFrame
-      
-      button.MouseButton1Click:Connect(function()
-        selectedPlayer = p
-        for _, child in ipairs(playerListFrame:GetChildren()) do
-          if child:IsA("TextButton") then
-            child.BackgroundColor3 = Color3.fromRGB(100,100,100)
-          end
-        end
-        button.BackgroundColor3 = Color3.fromRGB(0,200,0)
-      end)
     end
   end
+end
+
+-- إعادة تحديث القائمة عند تغيير نص البحث
+local searchBoxRef = ui.playersPanel:FindFirstChild("SearchBox")
+if searchBoxRef then
+  searchBoxRef.Changed:Connect(function(prop)
+    if prop == "Text" then
+      updatePlayerList()
+    end
+  end)
 end
 
 ---------------------------------------------
@@ -784,30 +803,23 @@ ui.lightSetButton.MouseButton1Click:Connect(function()
 end)
 
 ---------------------------------------------
--- Close UI Function - إغلاق جميع المهام وإعادة الحالة الطبيعية
+-- Close UI Function
 ---------------------------------------------
 local function closeUI()
-  -- إيقاف الطيران وإعادة تمكين التصادم
   if flying then
     disableFlight(getCharacter(), bodyGyro, bodyVelocity)
     flying = false
   end
-  -- إعادة سرعة المشي إلى الأصل وإيقاف تعديل السرعة
   if speedBoostActive then
     disableSpeedBoost()
     speedBoostActive = false
   end
-  -- إيقاف أي زيادة تلقائية ومهام أخرى
   autoIncreasingFlight = false
   autoIncreasingSpeed = false
   stickyTeleportActive = false
   spectateActive = false
-  pulledPlayers = {}  -- تفريغ قائمة السحب
-  
-  -- إزالة كافة عناصر الـ UI
-  if ui and ui.mainFrame then
-    ui.mainFrame:Destroy()
-  end
+  pulledPlayers = {}
+  if ui and ui.mainFrame then ui.mainFrame:Destroy() end
 end
 
 ui.closeButton.MouseButton1Click:Connect(function() closeUI() end)
@@ -910,7 +922,7 @@ ui.speedSetButton.MouseButton1Click:Connect(function()
 end)
 
 ---------------------------------------------
--- Players Tab Functions (Circles, Vanish, Teleport, Pull, etc.)
+-- Players Tab Functions
 ---------------------------------------------
 local function updatePlayerCircles()
   local cam = Workspace.CurrentCamera
@@ -928,9 +940,7 @@ local function updatePlayerCircles()
           circle.Radius = 50 / (cam.FieldOfView / 70)
         end
       else
-        if circle then
-          circle.Visible = false
-        end
+        if circle then circle.Visible = false end
       end
     end
   end
@@ -974,16 +984,11 @@ end
 local function disablePlayerCircles()
   playersCirclesEnabled = false
   for currentPlayer, circle in pairs(playerCircles) do
-    if circle then
-      circle.Visible = false
-      circle:Remove()
-    end
+    if circle then circle.Visible = false; circle:Remove() end
   end
   playerCircles = {}
   for currentPlayer, billboard in pairs(nameLabels) do
-    if billboard and billboard.Parent then
-      billboard:Destroy()
-    end
+    if billboard and billboard.Parent then billboard:Destroy() end
   end
   nameLabels = {}
 end
@@ -1002,9 +1007,7 @@ Players.PlayerAdded:Connect(function(newPlayer)
   newPlayer.CharacterAdded:Connect(function(character)
     if playersCirclesEnabled and newPlayer ~= player then
       wait(1)
-      if not playerCircles[newPlayer] then
-        playerCircles[newPlayer] = createCircle()
-      end
+      if not playerCircles[newPlayer] then playerCircles[newPlayer] = createCircle() end
       if not nameLabels[newPlayer] then
         local billboard = createNameLabel(newPlayer)
         billboard.Parent = character:WaitForChild("Head")
@@ -1024,9 +1027,7 @@ Players.PlayerRemoving:Connect(function(leavingPlayer)
     nameLabels[leavingPlayer]:Destroy()
     nameLabels[leavingPlayer] = nil
   end
-  if selectedPlayer == leavingPlayer then
-    selectedPlayer = nil
-  end
+  if selectedPlayer == leavingPlayer then selectedPlayer = nil end
   updatePlayerList()
 end)
 
@@ -1041,7 +1042,6 @@ ui.playersPanel.VanishToggle.MouseButton1Click:Connect(function()
   end
 end)
 
--- Teleport on Circle Click
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
   if input.UserInputType == Enum.UserInputType.MouseButton1 and not gameProcessed then
     local mousePos = UserInputService:GetMouseLocation()
@@ -1051,9 +1051,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
           if p.Character and p.Character:FindFirstChild("Head") then
             local targetPos = p.Character.Head.Position + Vector3.new(0,5,0)
             local myCharacter = getCharacter()
-            if myCharacter then
-              myCharacter:MoveTo(targetPos)
-            end
+            if myCharacter then myCharacter:MoveTo(targetPos) end
           end
           break
         end
@@ -1062,7 +1060,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
   end
 end)
 
--- UI Toggle using CTRL Key
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
   if gameProcessed then return end
   if input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.RightControl then
@@ -1070,46 +1067,28 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
   end
 end)
 
--- Support Key F to Toggle Flight
 player:GetMouse().KeyDown:Connect(function(key)
-  if key:lower() == "f" then
-    toggleFlight()
-  end
+  if key:lower() == "f" then toggleFlight() end
 end)
 
--- Flight Movement Input Handling
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
   if gameProcessed then return end
-  if input.KeyCode == Enum.KeyCode.W then
-    flightControl.N = true
-  elseif input.KeyCode == Enum.KeyCode.S then
-    flightControl.S = true
-  elseif input.KeyCode == Enum.KeyCode.A then
-    flightControl.W = true
-  elseif input.KeyCode == Enum.KeyCode.D then
-    flightControl.E = true
-  elseif input.KeyCode == Enum.KeyCode.Space then
-    flightControl.Up = true
-  elseif input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.C then
-    flightControl.Down = true
-  end
+  if input.KeyCode == Enum.KeyCode.W then flightControl.N = true
+  elseif input.KeyCode == Enum.KeyCode.S then flightControl.S = true
+  elseif input.KeyCode == Enum.KeyCode.A then flightControl.W = true
+  elseif input.KeyCode == Enum.KeyCode.D then flightControl.E = true
+  elseif input.KeyCode == Enum.KeyCode.Space then flightControl.Up = true
+  elseif input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.C then flightControl.Down = true end
 end)
 
 UserInputService.InputEnded:Connect(function(input, gameProcessed)
   if gameProcessed then return end
-  if input.KeyCode == Enum.KeyCode.W then
-    flightControl.N = false
-  elseif input.KeyCode == Enum.KeyCode.S then
-    flightControl.S = false
-  elseif input.KeyCode == Enum.KeyCode.A then
-    flightControl.W = false
-  elseif input.KeyCode == Enum.KeyCode.D then
-    flightControl.E = false
-  elseif input.KeyCode == Enum.KeyCode.Space then
-    flightControl.Up = false
-  elseif input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.C then
-    flightControl.Down = false
-  end
+  if input.KeyCode == Enum.KeyCode.W then flightControl.N = false
+  elseif input.KeyCode == Enum.KeyCode.S then flightControl.S = false
+  elseif input.KeyCode == Enum.KeyCode.A then flightControl.W = false
+  elseif input.KeyCode == Enum.KeyCode.D then flightControl.E = false
+  elseif input.KeyCode == Enum.KeyCode.Space then flightControl.Up = false
+  elseif input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.C then flightControl.Down = false end
 end)
 
 ---------------------------------------------
@@ -1150,11 +1129,8 @@ RunService.RenderStepped:Connect(function(deltaTime)
     end
   end
   
-  if playersCirclesEnabled then
-    updatePlayerCircles()
-  end
+  if playersCirclesEnabled then updatePlayerCircles() end
   
-  -- Improved Sticky Teleport:
   if stickyTeleportActive then
     if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("Head") then
       local targetPos = selectedPlayer.Character.Head.Position + Vector3.new(0,5,0)
@@ -1162,43 +1138,72 @@ RunService.RenderStepped:Connect(function(deltaTime)
       if myCharacter and myCharacter:FindFirstChild("HumanoidRootPart") then
         local currentPos = myCharacter.HumanoidRootPart.Position
         if (currentPos - targetPos).Magnitude > 5 then
-          pcall(function()
-            myCharacter:MoveTo(targetPos)
-          end)
+          pcall(function() myCharacter:MoveTo(targetPos) end)
         end
       end
     end
-    -- نقل اللاعبين المسحوبين معك عند الانتقال باستخدام RemoteEvent:
     for _, p in pairs(pulledPlayers) do
       if p and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
         local myCharacter = getCharacter()
         if myCharacter and myCharacter:FindFirstChild("HumanoidRootPart") then
           local pullPos = myCharacter.HumanoidRootPart.Position + Vector3.new(0,5,0)
-          pullEvent:FireServer(p, pullPos)
+          pcall(function() pullEvent:FireServer(p, pullPos) end)
         end
       end
     end
   end
   
-  -- Continuous Pull Functionality for pulled players using RemoteEvent:
   for _, p in pairs(pulledPlayers) do
     if p and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
       local myCharacter = getCharacter()
       if myCharacter and myCharacter:FindFirstChild("HumanoidRootPart") then
         local pullPos = myCharacter.HumanoidRootPart.Position + Vector3.new(0, 5, 0)
-        pullEvent:FireServer(p, pullPos)
+        pcall(function() pullEvent:FireServer(p, pullPos) end)
       end
     end
   end
 end)
 
 ---------------------------------------------
--- تحديث دوري لقائمة اللاعبين كل ثانية
+-- Reset Sticky Teleport every 10 seconds with notification
+---------------------------------------------
+spawn(function()
+  while wait(10) do
+    if stickyTeleportActive then
+      stickyTeleportActive = false
+      showNotification("تم التحديث", 0.25)
+      local char = player.Character or player.CharacterAdded:Wait()
+      stickyTeleportActive = true
+      if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("Head") then
+        local targetPos = selectedPlayer.Character.Head.Position + Vector3.new(0,5,0)
+        if char and char:FindFirstChild("HumanoidRootPart") then
+          pcall(function() char:MoveTo(targetPos) end)
+        end
+      end
+    end
+  end
+end)
+
+---------------------------------------------
+-- Reinitialize Sticky Teleport on Respawn
+---------------------------------------------
+player.CharacterAdded:Connect(function(character)
+  -- عند إعادة تحميل شخصيتك يتم تفعيل الانتقال اللاصق تلقائياً
+  stickyTeleportActive = true
+  wait(0.1) -- تأخير بسيط للسماح للشخصية بالتحميل
+  if selectedPlayer and selectedPlayer.Character and selectedPlayer.Character:FindFirstChild("Head") then
+    local targetPos = selectedPlayer.Character.Head.Position + Vector3.new(0,5,0)
+    if character:FindFirstChild("HumanoidRootPart") then
+      pcall(function() character:MoveTo(targetPos) end)
+    end
+  end
+end)
+
+---------------------------------------------
+-- Update Player List every 1 second
 ---------------------------------------------
 spawn(function()
   while wait(1) do
-    if ui and ui.playersPanel and ui.playersPanel.Visible then
-      updatePlayerList()
-    end
+    if ui and ui.playersPanel and ui.playersPanel.Visible then updatePlayerList() end
   end
 end)
